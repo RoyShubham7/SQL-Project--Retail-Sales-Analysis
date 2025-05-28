@@ -408,3 +408,209 @@ SELECT
     (SELECT SUM(total_sale) FROM retail_sale) AS repeat_customer_sales_pct
 FROM retail_sale
 WHERE customer_id IN (SELECT customer_id FROM repeat_customers);
+
+--Customer Segmentation & Lifetime Value
+--Q 36.What is the total number of repeat vs one-time customers?
+
+SELECT
+  customer_type,
+  COUNT(*) AS total_customers
+FROM (
+  SELECT
+    customer_id,
+    CASE
+      WHEN COUNT(*) = 1 THEN 'One-Time'
+      ELSE 'Repeat'
+    END AS customer_type
+  FROM retail_sale
+  GROUP BY customer_id
+) AS sub
+GROUP BY customer_type;
+
+--Q 37.Which customer has the highest lifetime value (LTV)?
+ Select Top 1
+    customer_id,
+	Sum(total_sale) AS lifetime_value
+from retail_sale
+group by customer_id
+order by lifetime_value desc;
+
+--Q 38.What is the average number of purchases per customer?
+ 
+ SELECT AVG(purchase_count) AS avg_purchases
+FROM (
+  SELECT customer_id, COUNT(*) AS purchase_count
+  FROM retail_sale
+  GROUP BY customer_id
+) sub;
+--Q 39.Which customer segment (by age group) has the highest average profit per transaction?
+ SELECT 
+  CASE 
+    WHEN age BETWEEN 18 AND 25 THEN '18-25'
+    WHEN age BETWEEN 26 AND 35 THEN '26-35'
+    WHEN age BETWEEN 36 AND 45 THEN '36-45'
+    WHEN age BETWEEN 46 AND 60 THEN '46-60'
+    ELSE '60+'
+  END AS age_group,
+  AVG(total_sale - cogs) AS avg_profit
+FROM retail_sale
+GROUP BY CASE 
+    WHEN age BETWEEN 18 AND 25 THEN '18-25'
+    WHEN age BETWEEN 26 AND 35 THEN '26-35'
+    WHEN age BETWEEN 36 AND 45 THEN '36-45'
+    WHEN age BETWEEN 46 AND 60 THEN '46-60'
+    ELSE '60+'
+	END ;
+--Q 40.How many customers are in each age group?
+
+SELECT 
+  CASE 
+    WHEN age BETWEEN 18 AND 25 THEN '18-25'
+    WHEN age BETWEEN 26 AND 35 THEN '26-35'
+    WHEN age BETWEEN 36 AND 45 THEN '36-45'
+    WHEN age BETWEEN 46 AND 60 THEN '46-60'
+    ELSE '60+'
+  END AS age_group,
+  COUNT(DISTINCT customer_id) AS customer_count
+FROM retail_sale
+GROUP BY CASE 
+    WHEN age BETWEEN 18 AND 25 THEN '18-25'
+    WHEN age BETWEEN 26 AND 35 THEN '26-35'
+    WHEN age BETWEEN 36 AND 45 THEN '36-45'
+    WHEN age BETWEEN 46 AND 60 THEN '46-60'
+    ELSE '60+'
+  END;
+ -- Sales Efficiency & Basket Analysis
+  --Q 41.What is the average basket size (items per transaction)?
+
+SELECT AVG(quantiy) AS avg_basket_size FROM retail_sale;
+
+--Q 42.Which gender has the higher average basket size?
+
+SELECT gender, AVG(quantiy) AS avg_basket_size
+FROM retail_sale
+GROUP BY gender;
+
+
+--Q 43.Which transactions had unusually high quantities (outliers)?
+
+SELECT * FROM retail_sale
+WHERE quantiy > (
+  SELECT AVG(quantiy) + 2 * STDEV(quantiy) FROM retail_sale
+);
+
+-- Note  Find the Standard devision 
+SELECT
+  Category,
+  Quantiy,
+  STDEV(Quantiy) OVER (PARTITION BY Category) AS CategoryStdDev
+FROM retail_sale;
+
+--Q.44.What’s the distribution of sales by number of items sold?
+
+SELECT quantiy, COUNT(*) AS frequency
+FROM retail_sale
+GROUP BY quantiy
+ORDER BY quantiy;
+
+--Promotions & Pricing
+--Q 45.What is the average unit price across all categories?
+
+SELECT 
+   category,
+   AVG(price_per_unit) AS avg_price
+FROM retail_sale
+GROUP BY category;
+
+---Q 46.Which transactions had the lowest price per unit in each category?
+
+SELECT *
+FROM retail_sale s1
+WHERE price_per_unit = (
+  SELECT MIN(price_per_unit) FROM retail_sale s2 WHERE s2.category = s1.category
+);
+--Q 47.Are customers more sensitive to price in any particular category?
+---  Noted --Approach: Look for negative correlation between price and quantity sold per category.
+
+SELECT 
+   category, 
+   price_per_unit, 
+   AVG(quantiy) AS avg_quantity
+FROM retail_sale
+GROUP BY category, price_per_unit
+ORDER BY category, price_per_unit;
+
+---Q 48.Which category gives highest ROI (return on investment)?
+
+SELECT category, AVG((total_sale - cogs) / cogs) AS avg_roi
+FROM retail_sale
+GROUP BY category
+ORDER BY avg_roi DESC;
+
+--Operational KPIs
+--Q 49. How many transactions are there each day?
+
+SELECT sale_date AS days, COUNT(*) AS transactions
+FROM retail_sale
+GROUP BY sale_date 
+ORDER BY sale_date ;
+
+
+--Q 50.Which day of the week sees the highest average sales value?
+
+
+SELECT
+     sale_date AS day_of_week, AVG(total_sale) AS avg_sales
+FROM retail_sale
+GROUP BY sale_date
+ORDER BY avg_sales DESC;
+
+--Q 51.What is the average margin per unit sold per category?
+
+SELECT 
+   category, 
+   AVG((total_sale - cogs) / quantiy) AS margin_per_unit
+FROM retail_sale
+GROUP BY category;
+
+--Q 52.What is the total number of items sold per category?
+
+SELECT 
+    category, 
+    SUM(quantiy) AS total_items_sold
+FROM retail_sale
+GROUP BY category
+ORDER BY total_items_sold DESC;
+
+
+----Data Quality & Integrity
+--Q 53.Are there any transactions with negative or zero values?
+
+SELECT * 
+FROM retail_sale
+WHERE 
+ quantiy <= 0 OR
+ price_per_unit <= 0
+ OR total_sale <= 0;
+
+--Q 54. Check if total_sale = price_per_unit * quantity for all transactions.
+
+
+SELECT * 
+FROM retail_sale
+WHERE total_sale != quantiy * price_per_unit;
+
+--Q55.Find outliers in profit per transaction.
+
+
+SELECT *
+FROM retail_sale
+WHERE (total_sale - cogs) > (
+  SELECT AVG(total_sale - cogs) + 2 * STDEV(total_sale - cogs) FROM retail_sale
+) ;
+--Q 56.Are there any duplicated transactions?
+
+SELECT transactions_id, COUNT(*) AS count
+FROM retail_sale
+GROUP BY transactions_id
+HAVING COUNT(*) > 1;
